@@ -44,11 +44,63 @@ def init_db():
             value TEXT
         )
     ''')
-    
+
+    # Latest Scan Results Table (For persistence)
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS latest_scan (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            ticker TEXT,
+            data_json TEXT,
+            scan_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    ''')
+
     conn.commit()
     conn.close()
     print("Database initialized successfully.")
 
+# --- Scan Result Persistence ---
+import json
+
+def save_scan_results(df_results):
+    """Saves the dataframe results to DB as JSON."""
+    conn = get_db_connection()
+    try:
+        cursor = conn.cursor()
+        # Clear old results
+        cursor.execute("DELETE FROM latest_scan")
+        
+        # Insert new results
+        if not df_results.empty:
+            for _, row in df_results.iterrows():
+                data_str = json.dumps(row.to_dict())
+                cursor.execute("INSERT INTO latest_scan (ticker, data_json) VALUES (?, ?)", (row['ticker'], data_str))
+        
+        conn.commit()
+    finally:
+        conn.close()
+
+def get_latest_scan_results():
+    """Retrieves the latest scan results from DB."""
+    conn = get_db_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute("SELECT data_json, scan_time FROM latest_scan")
+        rows = cursor.fetchall()
+        
+        if not rows:
+            return pd.DataFrame(), None
+            
+        data_list = [json.loads(r[0]) for r in rows]
+        last_time = rows[0][1] # Get timestamp from first row
+        return pd.DataFrame(data_list), last_time
+    except Exception as e:
+        print(f"Error loading scan results: {e}")
+        return pd.DataFrame(), None
+    finally:
+        conn.close()
+
+# --- Portfolio Functions ---
 def add_portfolio_item(ticker, buy_price, target_price=None, cutloss_price=None, notes=""):
     """Adds or updates a stock in the portfolio."""
     conn = get_db_connection()
@@ -128,6 +180,30 @@ def get_setting(key):
         row = cursor.fetchone()
         return row[0] if row else None
     finally:
+        conn.close()
+
+def add_master_stock(ticker, name="Custom"):
+    """Adds a new ticker to the master_stocks table."""
+    conn = get_db_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute('''
+            INSERT OR IGNORE INTO master_stocks (ticker, company_name)
+            VALUES (?, ?)
+        ''', (ticker.upper(), name))
+        return cursor.rowcount > 0
+    finally:
+        conn.commit()
+        conn.close()
+
+def delete_master_stock(ticker):
+    """Removes a ticker from the master_stocks table."""
+    conn = get_db_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM master_stocks WHERE ticker = ?", (ticker.upper(),))
+    finally:
+        conn.commit()
         conn.close()
 
 if __name__ == "__main__":

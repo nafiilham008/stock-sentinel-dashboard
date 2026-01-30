@@ -71,6 +71,27 @@ def send_scan_report(title, df_results):
             icon = "⚡"
             message += f"{icon} **{ticker}** @ {price}\n"
             message += f"   Vol: {vol:.1f}x | Price: {change:+.2f}%\n"
+        
+        elif 'rsi' in row:
+            # RSI Report
+            rsi_val = row['rsi']
+            message += f"📉 **{ticker}** @ {price}\n"
+            message += f"   RSI: {rsi_val:.1f} (Oversold)\n"
+
+        elif 'macd_val' in row:
+             # MACD Report
+             message += f"✨ **{ticker}** @ {price}\n"
+             message += f"   Golden Cross Detected! (Bullish)\n"
+        
+        # --- Trade Suggestions ---
+        if 'plan_cons_sl' in row:
+            sl_c = format_currency(row['plan_cons_sl'])
+            tp_c = format_currency(row['plan_cons_tp'])
+            sl_a = format_currency(row['plan_aggr_sl'])
+            tp_a = format_currency(row['plan_aggr_tp'])
+            
+            message += f"   🎯 **Plan A (Safe):** SL {sl_c} | TP {tp_c}\n"
+            message += f"   🚀 **Plan B (Aggressive):** SL {sl_a} | TP {tp_a}\n"
             
         count += 1
         
