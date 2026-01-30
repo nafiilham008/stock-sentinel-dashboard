@@ -122,7 +122,12 @@ def background_scan_job(interval_sec=1800, start_h=9, start_m=0):
         except Exception as e:
             print(f"Background scan error: {e}")
             
-        time.sleep(interval_sec)
+        # Smart Sleep (Check every second to allow immediate stop)
+        for _ in range(int(interval_sec)):
+            if not scheduler["running"]:
+                print("Stopping background scan...")
+                break
+            time.sleep(1)
 
 st.sidebar.markdown("### ⏲️ Auto-Pilot")
 col_int, col_start = st.sidebar.columns(2)
