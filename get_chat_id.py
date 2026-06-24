@@ -1,7 +1,8 @@
 import requests
 import time
 
-BOT_TOKEN = "8544029074:AAGNhwxIxofMEfpPaLKVF2NEfcWbpVPwOMQ"
+# Masukkan Token Bot Telegram Anda di sini untuk mencari Chat ID
+BOT_TOKEN = "YOUR_BOT_TOKEN_HERE"
 
 def get_chat_id():
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/getUpdates"
