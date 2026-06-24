@@ -5,11 +5,11 @@ import pandas as pd
 # Fallback list containing LQ45 (Liquid 45) + Popular Volatile Stocks
 # This ensures we have a representative market sample ~50-60 stocks.
 STATIC_TICKERS = [
-    # Banks (Big Caps)
+    # 🏦 Big Banks (Pondasi IHSG)
     {'ticker': 'BBCA', 'name': 'Bank Central Asia Tbk'},
-    {'ticker': 'BBRI', 'name': 'Bank Rakyat Indonesia (Persero) Tbk'},
-    {'ticker': 'BMRI', 'name': 'Bank Mandiri (Persero) Tbk'},
-    {'ticker': 'BBNI', 'name': 'Bank Negara Indonesia (Persero) Tbk'},
+    {'ticker': 'BBRI', 'name': 'Bank Rakyat Indonesia Tbk'},
+    {'ticker': 'BMRI', 'name': 'Bank Mandiri Tbk'},
+    {'ticker': 'BBNI', 'name': 'Bank Negara Indonesia Tbk'},
     {'ticker': 'BRIS', 'name': 'Bank Syariah Indonesia Tbk'},
     {'ticker': 'ARTO', 'name': 'Bank Jago Tbk'},
     {'ticker': 'BBTN', 'name': 'Bank Tabungan Negara (Persero) Tbk'},
@@ -31,15 +31,15 @@ STATIC_TICKERS = [
     {'ticker': 'WIFI', 'name': 'Solusi Sinergi Digital Tbk'},
 
     # Energy, Mining, Oil & Gas
+    {'ticker': 'BBTN', 'name': 'Bank Tabungan Negara Tbk'},
+    
+    # ⚡ Energi & Tambang (Sering Volatil)
     {'ticker': 'ADRO', 'name': 'Adaro Energy Indonesia Tbk'},
     {'ticker': 'PTBA', 'name': 'Bukit Asam Tbk'},
     {'ticker': 'ITMG', 'name': 'Indo Tambangraya Megah Tbk'},
-    {'ticker': 'BUMI', 'name': 'Bumi Resources Tbk'},
-    {'ticker': 'BRMS', 'name': 'Bumi Resources Minerals Tbk'},
-    {'ticker': 'ANTM', 'name': 'Aneka Tambang Tbk'},
-    {'ticker': 'INCO', 'name': 'Vale Indonesia Tbk'},
-    {'ticker': 'MDKA', 'name': 'Merdeka Copper Gold Tbk'},
+    {'ticker': 'UNTR', 'name': 'United Tractors Tbk'},
     {'ticker': 'PGAS', 'name': 'Perusahaan Gas Negara Tbk'},
+    {'ticker': 'MEDC', 'name': 'Medco Energi Tbk'},
     {'ticker': 'AKRA', 'name': 'AKR Corporindo Tbk'},
     {'ticker': 'MEDC', 'name': 'Medco Energi Internasional Tbk'},
     {'ticker': 'HRUM', 'name': 'Harum Energy Tbk'},
@@ -83,8 +83,33 @@ STATIC_TICKERS = [
 
     # Property & Construction
     {'ticker': 'BSDE', 'name': 'Bumi Serpong Damai Tbk'},
+    
+    # 🥇 Emas & Logam (Banyak Peminat)
+    {'ticker': 'ANTM', 'name': 'Aneka Tambang Tbk'},
+    {'ticker': 'MDKA', 'name': 'Merdeka Copper Gold Tbk'},
+    {'ticker': 'INCO', 'name': 'Vale Indonesia Tbk'},
+    {'ticker': 'TINS', 'name': 'Timah Tbk'},
+    {'ticker': 'BRMS', 'name': 'Bumi Resources Minerals Tbk'},
+    
+    # 🛒 Consumer Goods (Defensif)
+    {'ticker': 'ICBP', 'name': 'Indofood CBP Tbk'},
+    {'ticker': 'INDF', 'name': 'Indofood Sukses Makmur Tbk'},
+    {'ticker': 'MYOR', 'name': 'Mayora Indah Tbk'},
+    {'ticker': 'KLBF', 'name': 'Kalbe Farma Tbk'},
+    {'ticker': 'SIDO', 'name': 'Industri Jamu Dan Farmasi Sido Muncul Tbk'},
+    {'ticker': 'UNVR', 'name': 'Unilever Indonesia Tbk'},
+    {'ticker': 'AMRT', 'name': 'Sumber Alfaria Trijaya Tbk'}, # Alfamart
+    
+    # 📱 Telco & Tech (Digitalisasi)
+    {'ticker': 'TLKM', 'name': 'Telkom Indonesia Tbk'},
+    {'ticker': 'ISAT', 'name': 'Indosat Tbk'},
+    {'ticker': 'EXCL', 'name': 'XL Axiata Tbk'},
+    {'ticker': 'GOTO', 'name': 'GoTo Gojek Tokopedia Tbk'},
+    
+    # 🏗️ Infrastruktur & Properti (Siklikal)
+    {'ticker': 'JSMR', 'name': 'Jasa Marga Tbk'},
     {'ticker': 'CTRA', 'name': 'Ciputra Development Tbk'},
-    {'ticker': 'PWON', 'name': 'Pakuwon Jati Tbk'},
+    {'ticker': 'BSDE', 'name': 'Bumi Serpong Damai Tbk'},
     {'ticker': 'SMRA', 'name': 'Summarecon Agung Tbk'},
     {'ticker': 'ASRI', 'name': 'Alam Sutera Realty Tbk'},
     {'ticker': 'APLN', 'name': 'Agung Podomoro Land Tbk'},
@@ -108,13 +133,27 @@ STATIC_TICKERS = [
     {'ticker': 'DATA', 'name': 'Remala Abadi Tbk'},
     {'ticker': 'PANI', 'name': 'Pantai Indah Kapuk Dua Tbk'},
     {'ticker': 'CUAN', 'name': 'Petrindo Jaya Kreasi Tbk'},
+    
+    # 🏭 Konglomerasi & Lainnya
+    {'ticker': 'ASII', 'name': 'Astra International Tbk'},
+    {'ticker': 'AMMN', 'name': 'Amman Mineral Internasional Tbk'},
     {'ticker': 'BREN', 'name': 'Barito Renewables Energy Tbk'},
+    {'ticker': 'CUAN', 'name': 'Petrindo Jaya Kreasi Tbk'},
+    {'ticker': 'PANI', 'name': 'Pantai Indah Kapuk Dua Tbk'},
     {'ticker': 'TPIA', 'name': 'Chandra Asri Pacific Tbk'},
     {'ticker': 'CGAS', 'name': 'Citra Nusantara Gemilang Tbk'},
     {'ticker': 'STRK', 'name': 'Lovina Beach Brewery Tbk'},
     {'ticker': 'FREN', 'name': 'Smartfren Telecom Tbk'},
     {'ticker': 'SRTG', 'name': 'Saratoga Investama Sedaya Tbk'},
     {'ticker': 'TOWR', 'name': 'Sarana Menara Nusantara Tbk'},
+    
+    # 🐔 Poultry / Ayam-ayaman
+    {'ticker': 'CPIN', 'name': 'Charoen Pokphand Indonesia Tbk'},
+    {'ticker': 'JPFA', 'name': 'Japfa Comfeed Indonesia Tbk'},
+    
+    # 🚢 Logistik & Kapal
+    {'ticker': 'SMDR', 'name': 'Samudera Indonesia Tbk'},
+    {'ticker': 'TMAS', 'name': 'Temas Tbk'}
 ]
 
 def fetch_tickers_from_web():

@@ -1,5 +1,6 @@
 import streamlit as st
 import pandas as pd
+from streamlit_autorefresh import st_autorefresh
 import database_manager as db
 import data_engine as de
 import analysis_engine as ae
@@ -8,6 +9,10 @@ import telegram_bot as bot
 
 # --- Page Config ---
 st.set_page_config(page_title="Stock Sentinel Dashboard", page_icon="📈", layout="wide")
+
+# --- Auto-Refresh ---
+# Refresh every 15 minutes (900,000 milliseconds)
+count = st_autorefresh(interval=900000, limit=100, key="fizzbuzzcounter")
 
 # --- Initialize ---
 if 'db_init' not in st.session_state:
@@ -49,6 +54,7 @@ def run_scanner():
     st.session_state['scan_results'] = df
     # Save to DB for persistence
     db.save_scan_results(df)
+    st.session_state['new_scan_done'] = True
     return df
 
 # --- Sidebar ---
@@ -220,14 +226,30 @@ if page == "Dashboard (Live)":
     # --- SECTION 1: LIVE MARKET FEED (TOP) ---
     st.markdown("### 📡 Live Market Signal (Feed)")
     
+    # --- MACRO MARKET COMPASS ---
+    macro = ae.get_macro_weather()
+    if macro:
+        if macro['color'] == 'green':
+            st.success(f"**Cuaca IHSG Hari Ini: {macro['status']} ({macro['change_pct']:.2f}%)**\n\n{macro['advice']}")
+        elif macro['color'] == 'red':
+            st.error(f"**Cuaca IHSG Hari Ini: {macro['status']} ({macro['change_pct']:.2f}%)**\n\n{macro['advice']}")
+        else:
+            st.info(f"**Cuaca IHSG Hari Ini: {macro['status']} ({macro['change_pct']:.2f}%)**\n\n{macro['advice']}")
+    
+    st.markdown("---")
+    
     # Auto-run scanner if empty (First load)
     if st.session_state['scan_results'].empty:
-        if st.button("▶ Start Market Feed"):
-            run_scanner()
-            st.rerun()
-        st.info("Market feed not active. Click Start to scan.")
+        st.info("🔄 Menjalankan Auto-Scan pertama kali... Mohon tunggu sebentar.")
+        run_scanner()
+        st.rerun()
     else:
         df_res = st.session_state['scan_results']
+        send_tele = st.session_state.get('new_scan_done', False)
+        tele_msg = ""
+        if send_tele:
+            phase_name, _ = ae.get_market_phase()
+            tele_msg += f"🛡️ **Stock Sentinel Live Update ({phase_name})**\n\n"
         
         # Backward compatibility for new columns
         if 'trend_strength' not in df_res.columns:
@@ -297,8 +319,105 @@ if page == "Dashboard (Live)":
                     use_container_width=True,
                     height=200
                 )
+            st.markdown("#### 🚀 Calon To The Moon (Breakout ATH)")
+            st.caption("Saham yang harganya sudah sangat dekat dengan rekor harga tertinggi sepanjang masa (All-Time High).")
+            df_ath = df_res[df_res['ath_distance_pct'] > -10].sort_values('ath_distance_pct', ascending=False).head(5)
+            if not df_ath.empty:
+                for _, row in df_ath.iterrows():
+                    price = row['current_price']
+                    ath = row['ath_price']
+                    roe = row.get('roe', None)
+                    tp_price = ath * 1.10 # Target 10%
+                    cl_price = ath * 0.95 # Cutloss 5%
+
+                    roe_text = "N/A"
+                    if roe is not None:
+                        roe_pct = roe * 100
+                        if roe_pct >= 15:
+                            roe_text = f"✅ {roe_pct:.2f}% (Sangat Sehat)"
+                        elif roe_pct < 0:
+                            roe_text = f"❌ {roe_pct:.2f}% (Rugi/Bakar Duit)"
+                        else:
+                            roe_text = f"⚠️ {roe_pct:.2f}% (Biasa/Kurang Sehat)"
+
+                    with st.expander(f"⭐ {row['ticker']} (Jarak ke puncak: {row['ath_distance_pct']:.2f}%)"):
+                        st.markdown(f"**Harga Saat Ini:** Rp {price:,.0f}")
+                        st.markdown(f"**Target Puncak (ATH):** Rp {ath:,.0f}")
+                        st.markdown(f"**Kesehatan Bisnis (ROE):** {roe_text}")
+                        st.markdown("---")
+                        st.markdown("💡 **Trading Playbook (AI Professional Advice):**")
+                        
+                        phase_name, phase_desc = ae.get_market_phase()
+                        
+                        # --- DYNAMIC NARRATIVE ENGINE (BREAKOUT) ---
+                        narrative = ""
+                        if "Golden Time" in phase_name or "Tutup" in phase_name or "Pre-Closing" in phase_name:
+                            if price >= ath:
+                                status_alert = st.success
+                                status_msg = f"🎯 **KEPUTUSAN SAAT INI ({phase_name}):**\n\nHarga bertahan kuat di atas Rp {ath:,.0f} menjelang penutupan. **Sinyal Beli (Buy) Sangat Valid!** Hajar Kanan sekarang atau hold jika sudah punya."
+                                narrative = f"Breakout terkonfirmasi sempurna di penghujung hari! Ini adalah 'Golden Time' yang kita tunggu. Penutupan yang kuat di atas resisten kritis menandakan institusi bersedia menahan barang (akumulasi), memberikan peluang besar harga akan lanjut reli besok pagi."
+                            else:
+                                status_alert = st.error
+                                status_msg = f"🛑 **KEPUTUSAN SAAT INI ({phase_name}):**\n\nSangat disayangkan, harga gagal bertahan di atas Rp {ath:,.0f} dan bursa mau tutup. **Breakout Gagal.** Lupakan saham ini atau segera Cut Loss jika terlanjur beli."
+                                narrative = f"Sayang sekali, saham ini gagal mempertahankan level penembusannya hingga bursa tutup. Pola seperti ini sering disebut 'False Breakout' (Jebakan Bull Trap). Bandar memancing ritel di pagi hari lalu membantingnya ke bawah. Hindari masuk."
+                        elif "Pagi" in phase_name or "Pembukaan" in phase_name:
+                            if price >= ath:
+                                status_alert = st.info
+                                status_msg = f"⏳ **KEPUTUSAN SAAT INI ({phase_name}):**\n\nHarga menembus Rp {ath:,.0f}, TAPI ini masih terlalu pagi. Rawan *profit taking*. Cicil beli kecil (Tes Ombak)."
+                                narrative = f"Saham ini sedang berusaha menembus rekor harga tertinggi (ATH). Karena ini masih pagi, volatilitas sangat tinggi. Seringkali bandar sengaja menarik harga ke atas sesaat untuk memancing ritel sebelum dibanting. Tetap waspada, amati apakah antrean beli (bid) cukup tebal."
+                            else:
+                                status_alert = st.warning
+                                status_msg = f"⏳ **KEPUTUSAN SAAT INI ({phase_name}):**\n\nBelum kuat menembus Rp {ath:,.0f}. Santai dulu, amati dari luar. Jangan tangkap pisau jatuh di pagi hari."
+                                narrative = f"Saham ini berpotensi breakout, namun pagi ini masih terlihat ragu-ragu dan belum mampu menembus resisten kuatnya. Jangan buru-buru masuk, biarkan market membentuk arahnya terlebih dahulu hingga sesi siang."
+                        else: # Sesi 1 or Sesi 2
+                            if price >= ath:
+                                status_alert = st.success
+                                status_msg = f"👍 **KEPUTUSAN SAAT INI ({phase_name}):**\n\nTren terlihat positif siang ini. Harga konsisten di atas batas aman. Boleh tambah porsi beli (Average Up)."
+                                narrative = f"Luar biasa! Melewati sesi pagi yang bergejolak, saham ini berhasil bertahan di atas harga ATH-nya. Ini adalah konfirmasi validasi tren positif. Bandar tampaknya serius melakukan akumulasi. Momentum sangat mendukung untuk masuk."
+                            else:
+                                status_alert = st.warning
+                                status_msg = f"⏳ **KEPUTUSAN SAAT INI ({phase_name}):**\n\nHarga masih tertahan di bawah Rp {ath:,.0f}. Momentum mulai hilang. Wait and see sampai Golden Time (14:30) nanti."
+                                narrative = f"Upaya penembusan harga tertinggi tampaknya tertahan di sesi ini. Harga tidak mampu dipertahankan dan tertekan kembali ke bawah resisten. Jangan memaksakan diri, lebih baik tunggu konfirmasi di jam 14:40 nanti."
+                        
+                        status_alert(status_msg)
+                        
+                        if macro and macro['color'] == 'red':
+                            st.markdown(f"🚨 **PERINGATAN MACRO:** Walaupun saham ini punya potensi Breakout, **Cuaca IHSG sedang Badai**. Mayoritas saham *breakout* di saat market hancur berpotensi menjadi *Bull Trap* (Jebakan). Kurangi porsi beli atau *wait and see*.")
+                        elif macro and macro['color'] == 'green':
+                            st.markdown(f"🔥 **DUKUNGAN MACRO:** Cuaca IHSG sedang Euforia! Probabilitas *breakout* sukses jauh lebih tinggi. Angin sedang bertiup dari belakang layar.")
+                            
+                        # --- DYNAMIC PROJECTION ENGINE (BREAKOUT) ---
+                        proyeksi = ""
+                        if "Pagi" in phase_name or "Pembukaan" in phase_name:
+                            proyeksi = f"- **Menjelang Siang (10:00 - 11:30):** Pantau apakah harga mampu bertahan di atas Rp {ath:,.0f}. Jika tiba-tiba melorot, lupakan dulu.\n- **Sesi Sore (14:40):** Ini waktu penentuan. Jika harga masih kuat bertengger di atas ATH, baru eksekusi beli dengan mantap."
+                        elif "Sesi" in phase_name:
+                            proyeksi = f"- **Sesi 2 (13:30 - 14:30):** Perhatikan apakah ada 'bantingan' (penurunan paksa) oleh bandar. Tetap santai.\n- **Jelang Tutup (14:40):** Keputusan final ada di jam ini. Jika *breakout* tetap valid, silakan tahan barangmu."
+                        elif "Golden Time" in phase_name or "Tutup" in phase_name or "Pre-Closing" in phase_name:
+                            proyeksi = f"- **Penutupan Hari Ini:** Evaluasi apakah saham ditutup kokoh. Jika ya, *breakout* sukses.\n- **Skenario Besok Pagi:** Rawan *profit taking* kilat. Siapkan antrean jual di target Rp {tp_price:,.0f}."
+                        else:
+                            proyeksi = f"- **Besok Pagi (09:00 - 09:30):** Waspada lonjakan atau bantingan di awal pembukaan.\n- **Siang (11:00):** Waktu untuk memastikan apakah tren kemarin masih berlanjut."
+
+                        st.markdown(f"**Analisa Eksekusi AI:**\n{narrative}")
+                        st.markdown(f"**Langkah Selanjutnya (Proyeksi Waktu):**\n{proyeksi}")
+                        
+                        bpjs_advice = ""
+                        if "Pagi" in phase_name or "Pembukaan" in phase_name:
+                            bpjs_advice = f"- **Strategi BPJS (Beli Pagi Jual Sore):** Kalau masuk sekarang niat main cepat, target jualmu di rentang **Rp {price * 1.02:,.0f} - Rp {price * 1.03:,.0f}** (+2-3%). JUAL sebelum bursa tutup berapapun harganya. Jangan ngarep besok mantul."
+                        elif "Sesi" in phase_name:
+                            bpjs_advice = f"- **Strategi BPJS (Beli Pagi Jual Sore):** Jika sudah mencapai batas cuan BPJS (sekitar **Rp {price * 1.02:,.0f}**), boleh langsung bungkus. Jangan terlalu serakah menunggu harga puncak."
+                        else:
+                            bpjs_advice = f"- **Strategi BPJS (Beli Pagi Jual Sore):** Sesi *Day Trading* sudah berakhir. Masuk jam segini otomatis kamu berhaluan Swing Trader (siap menahan barang menginap)."
+
+                        st.markdown("---")
+                        st.markdown("💸 **Exit Plan (Strategi Jual):**")
+                        st.markdown(f"- **Take Profit:** Pasang **Auto Order Jual** di target **Rp {tp_price:,.0f}** (+10%).")
+                        st.markdown(f"- **Cut Loss:** Sabuk pengaman di **Rp {cl_price:,.0f}**. Patuhi ketat.")
+                        st.markdown(bpjs_advice)
+                        
+                        if send_tele:
+                            tele_msg += f"🚀 *{row['ticker']}* (Rp {price:,.0f})\n{narrative}\n\n"
             else:
-                st.caption("No breakouts detected.")
+                st.info("Belum ada saham yang mau Breakout hari ini.")
 
         with col_vol:
             st.markdown("#### ⚡ Volatility Alert")
@@ -382,6 +501,127 @@ if page == "Dashboard (Live)":
                 )
             else:
                 st.caption("No doji patterns.")
+            st.markdown("#### ⚡ Ada Pergerakan Bandar (Volatilitas Tinggi)")
+            st.caption("Saham yang tiba-tiba ramai dibeli/dijual dengan volume tidak wajar hari ini.")
+            df_vol = df_res[df_res['is_volatile'] == True].head(5)
+            if not df_vol.empty:
+                for _, row in df_vol.iterrows():
+                    price = row['current_price']
+                    change = row['price_change_pct']
+                    vol = row['vol_spike_ratio']
+                    roe = row.get('roe', None)
+                    
+                    roe_text = "N/A"
+                    if roe is not None:
+                        roe_pct = roe * 100
+                        if roe_pct >= 15:
+                            roe_text = f"✅ {roe_pct:.2f}% (Sangat Sehat)"
+                        elif roe_pct < 0:
+                            roe_text = f"❌ {roe_pct:.2f}% (Rugi/Bakar Duit)"
+                        else:
+                            roe_text = f"⚠️ {roe_pct:.2f}% (Biasa/Kurang Sehat)"
+                    
+                    if change > 0:
+                        tp_low = price * 1.05
+                        tp_high = price * 1.10
+                        cl_price = price * 0.95
+
+                        status_harga = f"📈 **NAIK** {change:.2f}%"
+                        analisa = f"Volume transaksi meledak hingga {vol:.1f}x lipat rata-rata saat harga sedang NAIK. Secara teknikal, ini adalah jejak rekam bahwa Institusi/Bandar besar sedang melakukan akumulasi (borong barang)."
+                        if roe is not None and roe < 0:
+                            analisa += " **Namun PERHATIAN EKSTRA:** Secara fundamental, perusahaan ini mencetak kerugian (ROE Minus). Kenaikan ini berisiko tinggi murni karena spekulasi/gorengan. Disiplin *trading* harus ekstra ketat!"
+                    else:
+                        status_harga = f"📉 **TURUN** {abs(change):.2f}%"
+                        analisa = f"Lampu Kuning Menyala! Terdapat ledakan volume {vol:.1f}x lipat diiringi harga yang TURUN. Ini mengindikasikan Distribusi (Bandar sedang buang barang masif ke pasar ritel)."
+
+                    with st.expander(f"🔥 {row['ticker']} (Volume meledak {vol:.1f}x lipat)"):
+                        st.markdown(f"**Harga Saat Ini:** Rp {price:,.0f}")
+                        st.markdown(f"**Kondisi Hari Ini:** {status_harga}")
+                        st.markdown(f"**Kesehatan Bisnis (ROE):** {roe_text}")
+                        st.markdown("---")
+                        st.markdown("💡 **Trading Playbook (AI Professional Advice):**")
+                        st.markdown(f"**Insight Analis Dasar:** {analisa}")
+                        st.markdown("---")
+                        
+                        phase_name, phase_desc = ae.get_market_phase()
+                        
+                        # --- DYNAMIC NARRATIVE ENGINE (VOLATILE) ---
+                        if change > 0:
+                            narrative = ""
+                            if "Golden Time" in phase_name or "Tutup" in phase_name or "Pre-Closing" in phase_name:
+                                if price >= cl_price:
+                                    status_alert = st.success
+                                    status_msg = f"🎯 **KEPUTUSAN SAAT INI ({phase_name}):**\n\nHarga ditutup aman di atas batas *cut loss* (Rp {cl_price:,.0f}). Tren akumulasi bandar **VALID**. Aman di-Hold."
+                                    narrative = f"Pergerakan harga sukses dipertahankan hingga menjelang penutupan. Secara probabilitas, tren kenaikan (uptrend) jangka pendek masih sangat valid. Tidak ada tanda-tanda distribusi masif dari institusi."
+                                else:
+                                    status_alert = st.error
+                                    status_msg = f"🛑 **KEPUTUSAN SAAT INI ({phase_name}):**\n\nBencana! Harga dijebol ke bawah Rp {cl_price:,.0f} menjelang tutup. Bandar distribusi diam-diam. **EKSEKUSI CUT LOSS!**"
+                                    narrative = f"Lampu merah! Harga justru ditutup nyungsep menembus batas toleransi dukungan. Ini menandakan ledakan volume kemarin kemungkinan besar adalah aksi jualan terselubung bandar ke ritel. Sangat berisiko tinggi."
+                            elif "Pagi" in phase_name or "Pembukaan" in phase_name:
+                                if price >= cl_price * 1.05:
+                                    status_alert = st.warning
+                                    status_msg = f"⏳ **KEPUTUSAN SAAT INI ({phase_name}):**\n\nHarga melesat sangat kencang. Awas pancingan (FOMO)!"
+                                    narrative = f"Volume ledakan kemarin berlanjut dengan euforia pagi ini, harga melesat kencang. Hati-hati FOMO (Fear of Missing Out). Seringkali harga ditarik kencang di awal hanya untuk jualan. Jangan kejar harga atas."
+                                else:
+                                    status_alert = st.info
+                                    status_msg = f"⏳ **KEPUTUSAN SAAT INI ({phase_name}):**\n\nPagi ini rawan gocekan karena kemarin naik kencang. Jangan panik kalau tiba-tiba merah. Tahan diri dulu."
+                                    narrative = f"Sangat wajar jika pagi ini harga bergerak volatil atau bahkan terkoreksi sedikit (Profit Taking wajar). Bandar sedang menguji apakah ada kepanikan ritel. Amati reaksinya hingga lewat jam 10:00."
+                            else: # Sesi 1 or Sesi 2
+                                if price > cl_price * 1.02:
+                                    status_alert = st.success
+                                    status_msg = f"👍 **KEPUTUSAN SAAT INI ({phase_name}):**\n\nTren naik terkonfirmasi siang ini! Bandar melanjutkan *Markup*. Boleh ikut antre beli (Hajar Kanan)."
+                                    narrative = f"Konfirmasi yang solid! Setelah sempat diuji pagi tadi, harga kini stabil di area positif. Ini indikasi kuat bahwa 'Markup' (pengangkatan harga) oleh Institusi masih terus berlanjut. Momentum sangat baik."
+                                else:
+                                    status_alert = st.warning
+                                    status_msg = f"⏳ **KEPUTUSAN SAAT INI ({phase_name}):**\n\nHarga tertahan. Hati-hati bandar sedang mengukur minat ritel. Jangan tambah muatan dulu."
+                                    narrative = f"Harga terlihat loyo dan tertahan di sesi siang ini, padahal volume kemarin sangat besar. Ini bisa menjadi sinyal awal bandar mulai mendistribusikan (jual pelan-pelan) barangnya saat ritel sedang lengah."
+                            
+                            status_alert(status_msg)
+                            
+                            # --- DYNAMIC PROJECTION ENGINE (VOLATILE) ---
+                            proyeksi = ""
+                            if "Pagi" in phase_name or "Pembukaan" in phase_name:
+                                if price > cl_price * 1.05:
+                                    proyeksi = f"- **Menjelang Siang (10:30):** Karena pagi ini melesat naik, rawan dibanting siang nanti. Jangan buru-buru antre beli.\n- **Sore Hari (14:40):** Lihat apakah kenaikan pagi tadi sungguhan atau cuma jebakan."
+                                else:
+                                    proyeksi = f"- **Sesi Siang (11:00):** Jika pagi ini merah, pantau apakah jam 11 nanti mulai ditarik hijau. Jika ditarik hijau, itu adalah momen beli terbaik (Markup konfirmasi).\n- **Batas Waktu (14:40):** Jika sampai sore tetap tidak bisa naik, coret dari daftar."
+                            elif "Sesi" in phase_name:
+                                proyeksi = f"- **Sesi 2 (13:30 - 14:30):** Biasanya bandar mulai bergerak masif di jam ini. Waspadai volatilitas mendadak.\n- **Jelang Tutup (14:40):** Evaluasi akhir sebelum penutupan. Pastikan harga aman di atas batas *cut loss* (Rp {cl_price:,.0f})."
+                            else:
+                                proyeksi = f"- **Skenario Besok Pagi:** Jangan kaget jika pagi hari langsung merah sekejap (gocekan bandar). Jangan panik.\n- **Evaluasi Besok Siang:** Biarkan market menentukan arah aslinya setelah jam 10 pagi."
+
+                            st.markdown(f"**Analisa Eksekusi AI:**\n{narrative}")
+                            st.markdown(f"**Langkah Selanjutnya (Proyeksi Waktu):**\n{proyeksi}")
+                            
+                            bpjs_advice = ""
+                            if "Pagi" in phase_name or "Pembukaan" in phase_name:
+                                if price > cl_price * 1.05:
+                                    bpjs_advice = f"- **Strategi BPJS (Beli Pagi Jual Sore):** Sangat disarankan untuk volatilitas liar! Target copet kilat di **Rp {price * 1.03:,.0f}** (+3%). Langsung hajar kiri (jual). Jangan bawa menginap."
+                                else:
+                                    bpjs_advice = f"- **Strategi BPJS (Beli Pagi Jual Sore):** Ladang emas pencopet. Masuk dekat *support* (**Rp {cl_price:,.0f}**), ambil cuan di **Rp {price * 1.03:,.0f}** lalu lari. Jangan terbawa perasaan jika sore dibanting."
+                            elif "Sesi" in phase_name:
+                                bpjs_advice = f"- **Strategi BPJS (Beli Pagi Jual Sore):** Jika sudah cuan lumayan sejak pagi (harga sudah menyentuh **Rp {price * 1.02:,.0f}**), amankan sekarang. Bandar sering buang barang di sesi siang/sore."
+                            else:
+                                bpjs_advice = f"- **Strategi BPJS (Beli Pagi Jual Sore):** Jam segini bukan waktu untuk copet harian. Pasang incaran eksekusi di **Rp {price * 1.02:,.0f}** untuk trading plan besok pagi saja."
+
+                            st.markdown("---")
+                            st.markdown("💸 **Exit Plan (Strategi Jual):**")
+                            st.markdown(f"- **Take Profit:** Volatilitas tinggi = pergerakan cepat. Pasang antrean **Auto Order Jual** di rentang **Rp {tp_low:,.0f} - Rp {tp_high:,.0f}**.")
+                            st.markdown(f"- **Cut Loss:** Sabuk pengaman di **Rp {cl_price:,.0f}**. Patuhi *cut loss*.")
+                            st.markdown(bpjs_advice)
+                            
+                            if send_tele:
+                                tele_msg += f"🔥 *{row['ticker']}* (Rp {price:,.0f})\n{narrative}\n\n"
+                        else:
+                            st.error(f"🛑 **Skenario Eksekusi:** Sangat berisiko tinggi (*High Risk*). Secara teknikal, membeli saham yang sedang didistribusi bandar sama dengan menangkap pisau jatuh. **Wait and See**.")
+                            if send_tele:
+                                tele_msg += f"🚨 *{row['ticker']}* (Rp {price:,.0f})\nDistribusi Bandar. Jauhi saham ini!\n\n"
+            else:
+                st.info("Pasar sedang sepi, tidak ada pergerakan mencolok.")
+
+        if send_tele and tele_msg != "":
+            bot.send_telegram_message(tele_msg)
+            st.session_state['new_scan_done'] = False
 
     st.divider()
 

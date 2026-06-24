@@ -60,15 +60,17 @@ def send_scan_report(title, df_results):
         if 'ath_distance_pct' in row:
             # ATH Report
             dist = row['ath_distance_pct']
-            icon = "🚀" if dist >= 0 else "📈"
+            icon = "🚀" if dist >= 0 else "⭐"
+            ath_target = format_currency(row.get('ath_price', 0))
             message += f"{icon} **{ticker}** @ {price}\n"
-            message += f"   ATH Dist: {dist:.2f}%\n"
+            message += f"   🎯 Target Puncak: {ath_target} (Jarak: {dist:.2f}%)\n"
+            message += f"   💡 Saran: Pantau besok jam 09:00-09:30. Jika harga stabil menembus {ath_target}, siap Hajar Kanan (Beli)!\n\n"
             
         elif 'vol_spike_ratio' in row:
             # Volatility Report
             vol = row['vol_spike_ratio']
             change = row['price_change_pct']
-            icon = "⚡"
+            icon = "🔥"
             message += f"{icon} **{ticker}** @ {price}\n"
             message += f"   Vol: {vol:.1f}x | Price: {change:+.2f}%\n"
         
@@ -92,6 +94,8 @@ def send_scan_report(title, df_results):
             
             message += f"   🎯 **Plan A (Safe):** SL {sl_c} | TP {tp_c}\n"
             message += f"   🚀 **Plan B (Aggressive):** SL {sl_a} | TP {tp_a}\n"
+            message += f"   📈 Volume meledak: {vol:.1f}x | Perubahan: {change:+.2f}%\n"
+            message += f"   💡 Saran: Bandar sedang gerak. Pantau 30 mnt pertama bursa buka. Jika tetep kuat di zona hijau, cicil beli.\n\n"
             
         count += 1
         

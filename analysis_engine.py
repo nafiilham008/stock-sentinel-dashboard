@@ -1,11 +1,88 @@
 import data_engine as de
 import pandas as pd
 
+import yfinance as yf
+from datetime import datetime
+import pytz
+
+def get_market_phase():
+    """
+    Determines the current IDX market phase based on Jakarta time.
+    Returns a dict with phase name and a general context string.
+    """
+    tz = pytz.timezone('Asia/Jakarta')
+    now = datetime.now(tz)
+    
+    # For testing on weekends or outside market hours, you could mock 'now' here.
+    # We will use real time.
+    
+    if now.weekday() >= 5: # Saturday = 5, Sunday = 6
+        return "Weekend/Libur", "Bursa sedang libur. Waktu yang tepat untuk riset dan pasang Auto-Order untuk hari Senin."
+        
+    time_str = now.strftime("%H:%M")
+    
+    if "00:00" <= time_str < "08:45":
+        return "Pre-Market (Subuh/Persiapan)", "Bursa belum buka. Santai dulu, ngopi, dan siapkan Watchlist hari ini."
+    elif "08:45" <= time_str < "09:00":
+        return "Pre-Opening", "Bersiap! Bursa buka 15 menit lagi. Perhatikan antrean (Orderbook) di sekuritasmu."
+    elif "09:00" <= time_str < "09:30":
+        return "Fase Pembukaan (Volatilitas Tinggi)", "Sangat rawan gocekan dan aksi taking profit kilat. Tahan diri dari beli agresif kecuali sangat yakin."
+    elif "09:30" <= time_str < "11:30":
+        return "Sesi 1 (Validasi Tren)", "Tren harian mulai terlihat jelas. Waktu yang baik untuk mencari konfirmasi arah pergerakan."
+    elif "11:30" <= time_str < "13:30":
+        return "Istirahat Siang", "Bursa sedang istirahat. Evaluasi pergerakan Sesi 1 tadi sebelum Sesi 2 dimulai."
+    elif "13:30" <= time_str < "14:30":
+        return "Sesi 2 (Lanjutan)", "Melanjutkan tren Sesi 1. Pantau apakah ada bantingan atau tarikan mendadak."
+    elif "14:30" <= time_str < "15:00":
+        return "Golden Time (Jelang Tutup)", "Waktu eksekusi terbaik! Arah penutupan sudah hampir pasti. Silakan Beli/Hold/Cut Loss sekarang."
+    elif "15:00" <= time_str < "15:15":
+        return "Pre-Closing", "Bursa sedang proses penutupan (Blind order). Transaksi reguler sudah ditutup."
+    else:
+        return "Pasar Tutup (Malam)", "Bursa sudah tutup. Lakukan evaluasi (Post-Market Analysis) dan pasang Auto-Order untuk besok."
+
+def get_macro_weather():
+    """
+    Analyzes the Composite Index (IHSG / ^JKSE) to determine market weather.
+    """
+    try:
+        ihsg = yf.Ticker("^JKSE")
+        hist = ihsg.history(period="5d")
+        if len(hist) >= 2:
+            last_close = hist['Close'].iloc[-1]
+            prev_close = hist['Close'].iloc[-2]
+            change_pct = ((last_close - prev_close) / prev_close) * 100
+            
+            if change_pct > 1.5:
+                status = "☀️ Cerah (Euforia)"
+                advice = "IHSG lagi Pesta! Sangat bagus untuk Hajar Kanan saham Breakout."
+                color = "green"
+            elif change_pct < -1.0:
+                status = "⛈️ Badai (Crash)"
+                advice = "IHSG sedang Amblas! Hati-hati, lebih baik pegang uang kas (Wait & See). Jangan tangkap pisau jatuh."
+                color = "red"
+            else:
+                status = "⛅ Normal"
+                advice = "IHSG stabil. Berlaku strategi Swing Trading normal."
+                color = "blue"
+                
+            return {
+                'change_pct': change_pct,
+                'status': status,
+                'advice': advice,
+                'color': color,
+                'last_close': last_close
+            }
+    except Exception as e:
+        print(f"Error fetching macro weather: {e}")
+    
+    return None
+
 def analyze_ticker(ticker):
     """
     Performs full analysis on a ticker:
     1. ATH Check
     2. Volatility Check
+    3. Fundamental Check (ROE)
     
     Returns a dict with analysis results.
     """
@@ -13,6 +90,13 @@ def analyze_ticker(ticker):
         ticker = f"{ticker}.JK"
         
     try:
+        # Fetch Fundamental Data
+        try:
+            info = yf.Ticker(ticker).info
+            roe = info.get('returnOnEquity', None)
+        except:
+            roe = None
+
         # Fetch 5 years of data for ATH (max is too slow/heavy sometimes, 5y is decent for "modern" ATH)
         # For true ATH we need 'max', but let's try 'max' first and see performance.
         hist = de.get_ticker_data(ticker, period="max", interval="1d")
@@ -158,7 +242,8 @@ def analyze_ticker(ticker):
             'plan_cons_sl': sl_cons,
             'plan_cons_tp': tp_cons,
             'plan_aggr_sl': sl_aggr,
-            'plan_aggr_tp': tp_aggr
+            'plan_aggr_tp': tp_aggr,
+            'roe': roe
         }
         
     except Exception as e:
